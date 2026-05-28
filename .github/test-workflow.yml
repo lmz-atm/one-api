@@ -1,0 +1,28 @@
+name: Deploy to Render
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy via Render API
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          curl -X POST https://api.render.com/v1/services \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "name": "one-api-proxy",
+              "region": "oregon",
+              "plan": "free",
+              "repo": "https://github.com/lmz-atm/one-api",
+              "branch": "main",
+              "serviceType": "web",
+              "envVars": [
+                {"key": "PORT", "value": "3000"},
+                {"key": "SQL_DSN", "value": "sqlite:///data/one-api.db"}
+              ]
+            }'
