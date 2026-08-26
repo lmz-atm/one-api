@@ -67,7 +67,7 @@
 <div class="header">
   <h1>商户信息管理后台</h1>
   <div class="actions">
-    <a href="/" target="_blank" style="color:#fff;text-decoration:none;font-size:13px">打开收集表单</a>
+    <a href="index.html" target="_blank" style="color:#fff;text-decoration:none;font-size:13px">打开收集表单</a>
     <button onclick="exportCSV()">导出CSV</button>
     <button onclick="loadData()">刷新</button>
   </div>
@@ -121,7 +121,7 @@
 <script>
 const SUPABASE_URL = 'https://knykshhjspnfjmqjmqqx.supabase.co';
 const ANON_KEY = 'sb_publishable_PAl2zLGZxfupo_ceCUWEWQ_94HJ0YYv';
-const supabase = window.supabase.createClient(SUPABASE_URL, ANON_KEY);
+const sb = window.supabase.createClient(SUPABASE_URL, ANON_KEY);
 
 let allData = [];
 let deleteId = null;
@@ -249,7 +249,7 @@ function closeConfirm() {
 async function doDelete() {
   if (!deleteId) return;
   try {
-    const { error } = await supabase.from('submissions').delete().eq('id', deleteId);
+    const { error } = await sb.from('submissions').delete().eq('id', deleteId);
     if (error) throw error;
     closeConfirm();
     loadData();
