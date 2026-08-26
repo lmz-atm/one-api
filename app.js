@@ -46,13 +46,13 @@
     { key: 'remark', label: '备注', type: 'textarea', required: false }
   ];
 
-  const compressImage = (file, maxWidth = 1024, quality = 0.8) => {
+  const compressImage = (file, maxWidth = 800, quality = 0.75) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e) => {
         const img = new Image();
         img.onload = () => {
-          if (img.width <= maxWidth && file.size <= 500 * 1024) {
+          if (img.width <= maxWidth && file.size <= 300 * 1024) {
             resolve(e.target.result);
             return;
           }
