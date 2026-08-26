@@ -128,7 +128,7 @@ let deleteId = null;
 
 async function loadData() {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await sb
       .from('submissions')
       .select('*')
       .order('created_at', { ascending: false });
