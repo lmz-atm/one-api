@@ -333,22 +333,6 @@ function filterData() {
   `).join('');
 }
 
-function renderInfo(items) {
-  return items.map(([lbl, val, isImg]) => {
-    if (isImg) {
-      const hasImg = val && (val.startsWith('http') || val.startsWith('data:image/'));
-      return `
-        <div class="g-block">
-          <div class="g-title">🖼️ ${lbl}</div>
-          ${hasImg
-            ? `<div style="max-width: 420px"><div class="img-card"><div class="img-box" onclick="openViewer('${val.replace(/'/g,"\\'")}')"><img src="${val}" /></div></div></div>`
-            : `<div class="img-empty">未上传</div>`}
-        </div>`;
-    }
-    return `<div class="info-item"><div class="lbl">${lbl}</div><div class="val">${val || '<span style="color:var(--text-4)">—</span>'}</div></div>`;
-  }).join('');
-}
-
 function viewDetail(id) {
   const r = allData.find(x => x.id === id);
   if (!r) return;
