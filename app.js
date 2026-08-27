@@ -1,218 +1,66 @@
-(function () {
-  const SUPABASE_URL = 'https://knykshhjspnfjmqjmqqx.supabase.co';
-  const ANON_KEY = 'sb_publishable_PAl2zLGZxfupo_ceCUWEWQ_94HJ0YYv';
-  const supabase = window.supabase.createClient(SUPABASE_URL, ANON_KEY);
-  const toast = document.getElementById('toast');
-  const showToast = (msg, duration = 1800) => {
-    toast.textContent = msg;
-    toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), duration);
-  };
-  const channelMap = { wechat: '微信', alipay: '支付宝', all: '全部' };
-  let selectedChannel = 'all';
-  const uploadedImages = {};
-  let currentStep = 0;
-  const TOTAL_STEPS = 4;
-  const stepDefs = [
-    { title: '基本信息', icon: '基', textFields: ['merchant_name', 'mini_name_wechat', 'mini_name_alipay'], imageFields: [], showChannel: true },
-    { title: '资质照片', icon: '资', textFields: ['special_qualification_note'], imageFields: ['business_license_image', 'idcard_front_image', 'idcard_back_image', 'storefront_image', 'store_inside_image', 'mini_avatar_image', 'special_qualification_image'] },
-    { title: '联系人信息', icon: '联', textFields: ['admin_wechat_name', 'admin_wechat_phone', 'admin_wechat_email', 'admin_alipay_name', 'admin_alipay_phone', 'admin_alipay_email', 'legal_name', 'legal_wechat_id', 'phone_primary', 'phone_backup'], imageFields: [] },
-    { title: '结算信息', icon: '结', textFields: ['bank_account', 'legal_alipay_account', 'bank_name', 'bank_branch', 'remark'], imageFields: [] }
-  ];
-  const imageFields = [
-    { key: 'business_license_image', label: '营业执照', hint: '彩色照片，露出四边', required: true },
-    { key: 'idcard_front_image', label: '身份证正面', hint: '清晰无反光', required: true },
-    { key: 'idcard_back_image', label: '身份证反面', hint: '清晰无反光', required: true },
-    { key: 'storefront_image', label: '门头照', hint: '拍完整门头', required: true },
-    { key: 'store_inside_image', label: '店内照', hint: '店内环境', required: true },
-    { key: 'mini_avatar_image', label: '小程序头像', hint: '可后续补充', required: false },
-    { key: 'special_qualification_image', label: '特殊资质', hint: '如食品经营许可证', required: false }
-  ];
-  const textFields = [
-    { key: 'merchant_name', label: '商户名称', type: 'text', required: true, hint: '建议与营业执照一致' },
-    { key: 'admin_wechat_name', label: '微信·管理员姓名', type: 'text', required: true },
-    { key: 'admin_wechat_phone', label: '微信·管理员电话', type: 'tel', required: true },
-    { key: 'admin_wechat_email', label: '微信·管理员邮箱', type: 'email', required: true },
-    { key: 'admin_alipay_name', label: '支付宝·联系人姓名', type: 'text', required: true },
-    { key: 'admin_alipay_phone', label: '支付宝·联系人电话', type: 'tel', required: true },
-    { key: 'admin_alipay_email', label: '支付宝·联系人邮箱', type: 'email', required: true },
-    { key: 'bank_account', label: '对公账号 / 法人账号', type: 'text', required: true, hint: '企业填对公，个体户填法人卡' },
-    { key: 'legal_alipay_account', label: '法人实名认证支付宝', type: 'text', required: true },
-    { key: 'bank_name', label: '开户银行', type: 'text', required: true },
-    { key: 'bank_branch', label: '具体支行', type: 'text', required: true },
-    { key: 'legal_name', label: '法人姓名', type: 'text', required: true },
-    { key: 'legal_wechat_id', label: '法人微信号', type: 'text', required: true, hint: '微信号，非手机号' },
-    { key: 'mini_name_wechat', label: '微信小程序名称', type: 'text', required: true },
-    { key: 'mini_name_alipay', label: '支付宝小程序名称', type: 'text', required: true },
-    { key: 'phone_primary', label: '商家电话（常用）', type: 'tel', required: true },
-    { key: 'phone_backup', label: '商家电话（备用）', type: 'tel', required: true },
-    { key: 'special_qualification_note', label: '特殊资质说明', type: 'textarea', required: false },
-    { key: 'remark', label: '备注信息', type: 'textarea', required: false }
-  ];
-  const getFieldDef = (key) => textFields.find(f => f.key === key);
-  const getImageDef = (key) => imageFields.find(f => f.key === key);
-  const compressImage = (file, maxWidth = 800, quality = 0.75) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          if (img.width <= maxWidth && file.size <= 300 * 1024) { resolve(e.target.result); return; }
-          const ratio = maxWidth / img.width;
-          const canvas = document.createElement('canvas');
-          canvas.width = maxWidth;
-          canvas.height = Math.round(img.height * ratio);
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          resolve(canvas.toDataURL('image/jpeg', quality));
-        };
-        img.onerror = reject;
-        img.src = e.target.result;
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  };
-  const validateStep = (stepIdx) => {
-    const step = stepDefs[stepIdx];
-    const missing = [];
-    step.textFields.forEach(key => {
-      const def = getFieldDef(key);
-      if (!def || !def.required) return;
-      const el = document.querySelector(`[data-key="${key}"]`);
-      if (!el || !el.value.trim()) missing.push(def.label);
-    });
-    step.imageFields.forEach(key => {
-      const def = getImageDef(key);
-      if (!def || !def.required) return;
-      if (!uploadedImages[key]) missing.push(def.label);
-    });
-    if (missing.length) { showToast('请填写：' + missing.join('、')); return false; }
-    return true;
-  };
-  const updateStepper = () => {
-    const steps = document.querySelectorAll('.stepper .step');
-    const lines = document.querySelectorAll('.stepper .step-line');
-    steps.forEach((s, i) => {
-      s.classList.remove('active', 'done');
-      if (i < currentStep) s.classList.add('done');
-      else if (i === currentStep) s.classList.add('active');
-    });
-    lines.forEach((l, i) => { l.classList.toggle('done', i < currentStep); });
-  };
-  window.changeStep = (delta) => {
-    const next = currentStep + delta;
-    if (delta > 0 && !validateStep(currentStep)) return;
-    if (next < 0 || next >= TOTAL_STEPS) return;
-    currentStep = next;
-    updateStepper();
-    renderCurrentStep();
-    document.getElementById('prevBtn').style.display = currentStep > 0 ? '' : 'none';
-    document.getElementById('nextBtn').style.display = currentStep < TOTAL_STEPS - 1 ? '' : 'none';
-    document.getElementById('submitBtn').style.display = currentStep === TOTAL_STEPS - 1 ? '' : 'none';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-  const storedValues = {};
-  const getStoredValue = (key) => storedValues[key] || '';
-  const escapeAttr = (v) => String(v).replace(/"/g, '&quot;');
-  const renderCurrentStep = () => {
-    const step = stepDefs[currentStep];
-    const container = document.getElementById('mainContainer');
-    let html = '';
-    if (step.showChannel) {
-      html += `<div class="card"><div class="card-header"><div class="card-title"><div class="icon">渠</div>提交渠道</div></div><div class="card-body"><div class="channel-tabs">`;
-      html += `<div class="tab ${selectedChannel==='all'?'active':''}" data-channel="all">全部</div>`;
-      html += `<div class="tab ${selectedChannel==='wechat'?'active':''}" data-channel="wechat">微信</div>`;
-      html += `<div class="tab ${selectedChannel==='alipay'?'active':''}" data-channel="alipay">支付宝</div>`;
-      html += `</div></div></div>`;
-    }
-    if (step.textFields.length) {
-      html += `<div class="card"><div class="card-header"><div class="card-title"><div class="icon">${step.icon}</div>${step.title}</div></div><div class="card-body"><div class="form-grid">`;
-      step.textFields.forEach(key => {
-        const f = getFieldDef(key);
-        if (!f) return;
-        if (f.type === 'textarea') {
-          html += `<div class="field full"><div class="field-label">${f.label}${f.required?'<span class="req">*</span>':''}${f.hint?`<span class="hint-tip">${f.hint}</span>`:''}</div><textarea class="field-input" data-key="${key}" placeholder="请输入${f.label}">${getStoredValue(key)}</textarea></div>`;
-        } else {
-          html += `<div class="field${step.title==='基本信息'?' full':''}"><div class="field-label">${f.label}${f.required?'<span class="req">*</span>':''}${f.hint?`<span class="hint-tip">${f.hint}</span>`:''}</div><input class="field-input" type="${f.type}" data-key="${key}" placeholder="请输入${f.label}" value="${escapeAttr(getStoredValue(key))}" /></div>`;
-        }
-      });
-      html += `</div></div></div>`;
-    }
-    if (step.imageFields.length) {
-      html += `<div class="card"><div class="card-header"><div class="card-title"><div class="icon">${step.icon}</div>${step.title}</div></div><div class="card-body"><div class="upload-grid">`;
-      step.imageFields.forEach(key => {
-        const f = getImageDef(key);
-        const hasImg = !!uploadedImages[key];
-        html += `<div class="upload-item"><div class="upload-label">${f.label}${f.required?'<span class="req">*</span>':''}<span class="hint">${f.hint}</span></div>`;
-        html += `<div class="upload-box ${hasImg?'filled':''}" id="upload-${key}">`;
-        if (hasImg) { html += `<img src="${uploadedImages[key]}" /><button type="button" class="upload-remove" data-remove="${key}">×</button>`; }
-        else { html += `<div class="upload-placeholder"><div class="icon">📷</div><div class="text">点击上传</div><div class="sub">自动压缩优化</div></div>`; }
-        html += `<input type="file" accept="image/*" capture="environment" data-input="${key}" /></div></div>`;
-      });
-      html += `</div></div></div>`;
-    }
-    container.innerHTML = html;
-    document.querySelectorAll('.channel-tabs .tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        document.querySelectorAll('.channel-tabs .tab').forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        selectedChannel = tab.dataset.channel;
-      });
-    });
-    document.querySelectorAll('[data-input]').forEach(input => {
-      input.addEventListener('change', async (e) => {
-        const fieldKey = input.dataset.input;
-        const file = e.target.files[0];
-        if (!file) return;
-        showToast('处理中...');
-        try {
-          uploadedImages[fieldKey] = await compressImage(file);
-          renderCurrentStep();
-          showToast('上传成功');
-        } catch (err) { showToast('图片处理失败'); }
-      });
-    });
-    document.querySelectorAll('[data-remove]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const fieldKey = btn.dataset.remove;
-        delete uploadedImages[fieldKey];
-        const inputEl = document.querySelector(`[data-input="${fieldKey}"]`);
-        if (inputEl) inputEl.value = '';
-        renderCurrentStep();
-      });
-    });
-    document.querySelectorAll('[data-key]').forEach(el => {
-      el.addEventListener('input', () => { storedValues[el.dataset.key] = el.value; });
-    });
-  };
-  const submitForm = async () => {
-    if (!validateStep(currentStep)) return;
-    const submitBtn = document.getElementById('submitBtn');
-    submitBtn.disabled = true;
-    submitBtn.textContent = '提交中...';
-    try {
-      const data = { submit_channel: channelMap[selectedChannel] };
-      textFields.forEach(f => { data[f.key] = storedValues[f.key] || ''; });
-      imageFields.forEach(f => { data[f.key] = uploadedImages[f.key] || null; });
-      const { error } = await supabase.from('submissions').insert([data]).select('id');
-      if (error) throw new Error(error.message);
-      showToast('提交成功！', 2400);
-      document.getElementById('submitBar').style.display = 'none';
-      document.getElementById('mainContainer').innerHTML = `<div class="success-wrap"><div class="success-icon">✓</div><div class="success-title">信息提交成功</div><div class="success-desc">您的资料已加密保存，我们将尽快审核，如有疑问会联系您</div><div class="success-actions"><button class="again" onclick="location.reload()">再提交一份</button></div></div>`;
-      document.getElementById('stepper').style.display = 'none';
-    } catch (err) {
-      showToast('提交失败：' + err.message);
-      submitBtn.disabled = false;
-      submitBtn.textContent = '提交信息';
-    }
-  };
-  const init = () => {
-    document.getElementById('submitBar').style.display = '';
-    document.getElementById('submitBtn').addEventListener('click', submitForm);
-    updateStepper();
-    renderCurrentStep();
-  };
-  init();
+(function(){
+const SUPABASE_URL='https://knykshhjspnfjmqjmqqx.supabase.co';
+const ANON_KEY='sb_publishable_PAl2zLGZxfupo_ceCUWEWQ_94HJ0YYv';
+const supabase=window.supabase.createClient(SUPABASE_URL,ANON_KEY);
+const toast=document.getElementById('toast');
+const showToast=(msg,d=1800)=>{toast.textContent=msg;toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),d);};
+const channelMap={wechat:'微信',alipay:'支付宝',all:'全部'};
+let selectedChannel='all';
+const uploadedImages={};
+let currentStep=0;
+const TOTAL_STEPS=5;
+const stepDefs=[
+  {title:'基本信息',short:'基本',icon:'🏢',sub:'商户名称 & 小程序',desc:'填写商户基础信息，用于创建小程序主体及后续认证核验，请与营业执照保持一致',textFields:['merchant_name','mini_name_wechat','mini_name_alipay'],imageFields:[],showChannel:true},
+  {title:'资质证件照片',short:'资质',icon:'📋',sub:'营业执照 · 身份证',desc:'上传后系统会自动进行OCR识别，请确保照片清晰、边角完整、无反光遮挡',textFields:['special_qualification_note'],imageFields:['business_license_image','idcard_front_image','idcard_back_image','storefront_image','store_inside_image','mini_avatar_image','special_qualification_image']},
+  {title:'联系人信息',short:'联系人',icon:'👥',sub:'管理员 · 法人',desc:'用于进件审核联系及小程序权限分配，请确保联系方式真实有效',textFields:['admin_wechat_name','admin_wechat_phone','admin_wechat_email','admin_alipay_name','admin_alipay_phone','admin_alipay_email','legal_name','legal_wechat_id','phone_primary','phone_backup'],imageFields:[]},
+  {title:'结算信息',short:'结算',icon:'💰',sub:'银行账号 · 支付宝',desc:'资金结算账户信息，请仔细核对，开户银行必须与支行匹配',textFields:['bank_account','legal_alipay_account','bank_name','bank_branch','remark'],imageFields:[]},
+  {title:'确认并提交',short:'确认',icon:'✓',sub:'核对全部信息',desc:'请确认所有填写内容无误，提交后资料将进入审核流程',textFields:[],imageFields:[],isConfirm:true}
+];
+const imageFields=[
+  {key:'business_license_image',label:'营业执照',hint:'彩色照，露出四边',required:true},
+  {key:'idcard_front_image',label:'身份证正面',hint:'清晰无反光',required:true},
+  {key:'idcard_back_image',label:'身份证反面',hint:'清晰无反光',required:true},
+  {key:'storefront_image',label:'门头照',hint:'拍完整门头',required:true},
+  {key:'store_inside_image',label:'店内照',hint:'店内环境',required:true},
+  {key:'mini_avatar_image',label:'小程序头像',hint:'可后续补充',required:false},
+  {key:'special_qualification_image',label:'特殊资质',hint:'如食品经营许可',required:false}
+];
+const textFields=[
+  {key:'merchant_name',label:'商户名称',type:'text',required:true,hint:'建议与营业执照一致',channel:'all'},
+  {key:'mini_name_wechat',label:'微信小程序名称',type:'text',required:true,hint:'参考营业执照名称',channel:'wechat'},
+  {key:'mini_name_alipay',label:'支付宝小程序名称',type:'text',required:true,hint:'发布后不能修改',channel:'alipay'},
+  {key:'admin_wechat_name',label:'微信 · 管理员姓名',type:'text',required:true,channel:'wechat'},
+  {key:'admin_wechat_phone',label:'微信 · 管理员电话',type:'tel',required:true,channel:'wechat'},
+  {key:'admin_wechat_email',label:'微信 · 管理员邮箱',type:'email',required:true,channel:'wechat'},
+  {key:'admin_alipay_name',label:'支付宝 · 联系人姓名',type:'text',required:true,channel:'alipay'},
+  {key:'admin_alipay_phone',label:'支付宝 · 联系人电话',type:'tel',required:true,channel:'alipay'},
+  {key:'admin_alipay_email',label:'支付宝 · 联系人邮箱',type:'email',required:true,channel:'alipay'},
+  {key:'legal_name',label:'法人姓名',type:'text',required:true,channel:'all'},
+  {key:'legal_wechat_id',label:'法人微信号',type:'text',required:true,hint:'微信号，非手机号',channel:'all'},
+  {key:'phone_primary',label:'商家电话（常用）',type:'tel',required:true,channel:'all'},
+  {key:'phone_backup',label:'商家电话（备用）',type:'tel',required:true,channel:'all'},
+  {key:'bank_account',label:'对公账号 / 法人账号',type:'text',required:true,hint:'企业填对公，个体户填法人卡',channel:'all'},
+  {key:'legal_alipay_account',label:'法人实名认证支付宝',type:'text',required:true,channel:'all'},
+  {key:'bank_name',label:'开户银行',type:'text',required:true,channel:'all'},
+  {key:'bank_branch',label:'具体支行',type:'text',required:true,channel:'all'},
+  {key:'special_qualification_note',label:'特殊资质说明',type:'textarea',required:false,channel:'all'},
+  {key:'remark',label:'备注信息',type:'textarea',required:false,channel:'all'}
+];
+const isFieldRelevant=d=>{if(!d.channel||d.channel==='all')return true;if(selectedChannel==='all')return true;return d.channel===selectedChannel};
+const getFieldDef=k=>textFields.find(f=>f.key===k);
+const getImageDef=k=>imageFields.find(f=>f.key===k);
+const compressImage=(file,mw=800,q=0.75)=>new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>{const i=new Image();i.onload=()=>{if(i.width<=mw&&file.size<=300*1024){res(e.target.result);return;}const ra=mw/i.width;const c=document.createElement('canvas');c.width=mw;c.height=Math.round(i.height*ra);c.getContext('2d').drawImage(i,0,0,c.width,c.height);res(c.toDataURL('image/jpeg',q))};i.onerror=rej;i.src=e.target.result};r.onerror=rej;r.readAsDataURL(file)});
+const validateStep=si=>{const s=stepDefs[si];if(s.isConfirm)return true;const m=[];s.textFields.forEach(k=>{const d=getFieldDef(k);if(!d||!d.required)return;if(!isFieldRelevant(d))return;const el=document.querySelector(`[data-key="${k}"]`);if(!el||!el.value.trim())m.push(d.label)});s.imageFields.forEach(k=>{const d=getImageDef(k);if(!d||!d.required)return;if(!uploadedImages[k])m.push(d.label)});if(m.length){showToast('请填写：'+m.join('、'));return false}return true};
+const updateSidebar=()=>{const el=document.getElementById('sbSteps');if(el){el.innerHTML=stepDefs.map((s,i)=>`<div class="sb-step ${i===currentStep?'active':''} ${i<currentStep?'done':''}" data-jump="${i}"><div class="sb-icon">${i<currentStep?'✓':(i+1)}</div><div class="sb-info"><div class="sb-label">${s.title}</div><div class="sb-sub">${s.sub}</div></div></div>`).join('');el.querySelectorAll('[data-jump]').forEach(e=>{e.addEventListener('click',()=>{const idx=Number(e.dataset.jump);if(idx<currentStep){currentStep=idx;refreshAll()}})})}const pct=Math.round((currentStep/(TOTAL_STEPS-1))*100);const pf=document.getElementById('progFill');const pp=document.getElementById('progPct');if(pf)pf.style.width=pct+'%';if(pp)pp.textContent=pct+'%'};
+const updateMobileStepper=()=>{const ss=document.querySelectorAll('.m-stp');const ls=document.querySelectorAll('.m-line');ss.forEach((s,i)=>{s.classList.remove('active','done');if(i<currentStep)s.classList.add('done');else if(i===currentStep)s.classList.add('active')});ls.forEach((l,i)=>{l.classList.toggle('done',i<currentStep)});const cs=document.getElementById('mCurStep');if(cs)cs.textContent=currentStep+1;const ts=document.getElementById('mTotStep');if(ts)ts.textContent=TOTAL_STEPS;const pb=document.getElementById('mPbFill');if(pb)pb.style.width=Math.round(((currentStep)/(TOTAL_STEPS-1))*100)+'%'};
+const refreshAll=()=>{updateSidebar();updateMobileStepper();renderCurrentStep();document.getElementById('prevBtn').style.display=currentStep>0?'':'none';document.getElementById('nextBtn').style.display=currentStep<TOTAL_STEPS-1?'':'none';document.getElementById('submitBtn').style.display=currentStep===TOTAL_STEPS-1?'':'none';window.scrollTo({top:0,behavior:'smooth'})};
+window.changeStep=d=>{const n=currentStep+d;if(d>0&&!validateStep(currentStep))return;if(n<0||n>=TOTAL_STEPS)return;currentStep=n;refreshAll()};
+const buildSummary=()=>{const channel=channelMap[selectedChannel];const blocks=[{title:'① 基本信息',items:[['商户名称',storedValues.merchant_name,'all'],['提交渠道',channel,'all'],['微信小程序名称',storedValues.mini_name_wechat,'wechat'],['支付宝小程序名称',storedValues.mini_name_alipay,'alipay']]},{title:'② 联系人信息',items:[['微信·管理员姓名',storedValues.admin_wechat_name,'wechat'],['微信·管理员电话',storedValues.admin_wechat_phone,'wechat'],['微信·管理员邮箱',storedValues.admin_wechat_email,'wechat'],['支付宝·联系人姓名',storedValues.admin_alipay_name,'alipay'],['支付宝·联系人电话',storedValues.admin_alipay_phone,'alipay'],['支付宝·联系人邮箱',storedValues.admin_alipay_email,'alipay'],['法人姓名',storedValues.legal_name,'all'],['法人微信号',storedValues.legal_wechat_id,'all'],['商家电话·常用',storedValues.phone_primary,'all'],['商家电话·备用',storedValues.phone_backup,'all'],['特殊资质说明',storedValues.special_qualification_note,'all']]},{title:'③ 结算信息',items:[['对公账号/法人账号',storedValues.bank_account,'all'],['法人实名认证支付宝',storedValues.legal_alipay_account,'all'],['开户银行',storedValues.bank_name,'all'],['具体支行',storedValues.bank_branch,'all'],['备注',storedValues.remark,'all']]}];const rel=c=>c==='all'||selectedChannel==='all'||selectedChannel===c;const makeRow=([l,v,c])=>{if(!rel(c))return '';const d=textFields.find(f=>f.label===l);const empty=!String(v||'').trim();const miss=empty&&d&&d.required;return `<div class="sum-row ${miss?'miss':''}"><div class="lbl">${l}</div><div class="val">${v||''}</div></div>`};const imgList=imageFields.map(f=>({label:f.label,value:uploadedImages[f.key],miss:f.required&&!uploadedImages[f.key]}));const imgHtml=`<div class="sum-block"><div class="sum-head"><div class="tl"><span class="st ${imgList.some(i=>i.miss)?'st-miss':''}"></span>④ 资质证件照片</div><div class="ed" onclick="event.stopPropagation();jumpToStep(1)">✎ 修改</div></div><div class="sum-body"><div class="sum-images">${imgList.map(i=>`<div class="sum-img"><div class="il">${i.label}${i.miss?' <span style="color:var(--warn);margin-left:auto;font-weight:500">·需上传</span>':''}</div><div class="iv">${i.value?`<img src="${i.value}" onclick="openViewer(event,this.src)"/>`:`<div class="na">— 未上传 —</div>`}</div></div>`).join('')}</div></div></div>`;const blocksHtml=blocks.map((b,idx)=>{const rows=b.items.map(makeRow).filter(Boolean).join('');const anyMiss=b.items.some(([l,v,c])=>{if(!rel(c))return false;const d=textFields.find(f=>f.label===l);if(!d||!d.required)return false;return !String(v||'').trim()});const si=idx===0?0:(idx===1?2:3);return `<div class="sum-block"><div class="sum-head"><div class="tl"><span class="st ${anyMiss?'st-miss':''}"></span>${b.title}</div><div class="ed" onclick="event.stopPropagation();jumpToStep(${si})">✎ 修改</div></div><div class="sum-body"><div class="sum-grid">${rows}</div></div></div>`}).join('');return blocksHtml+imgHtml};
+window.jumpToStep=idx=>{currentStep=idx;refreshAll()};
+window.openViewer=(e,src)=>{if(e&&e.stopPropagation)e.stopPropagation();const s=src||(e&&e.target&&e.target.src);if(!s)return;document.getElementById('viewerImg').src=s;document.getElementById('viewer').classList.add('show')};
+window.closeViewer=e=>{if(e&&e.stopPropagation)e.stopPropagation();document.getElementById('viewer').classList.remove('show');document.getElementById('viewerImg').src=''};const storedValues={};const getStoredValue=k=>storedValues[k]||'';const escapeAttr=v=>String(v).replace(/"/g,'&quot;')};const renderCurrentStep=()=>{const step=stepDefs[currentStep];const container=document.getElementById('mainContainer');if(step.isConfirm){container.innerHTML=`<div class="card"><div class="card-head"><div class="title-wrap"><div class="ico">${step.icon}</div><div><div class="tt">${step.title}</div><div class="sb">${step.desc}</div></div></div><div class="tag">最后一步</div></div><div class="card-body">${buildSummary()}<div style="background:var(--primary-soft);border:1px solid var(--primary-border);border-radius:10px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start;margin-top:4px"><div style="font-size:15px">🛡️</div><div style="font-size:12.5px;color:var(--text-2);line-height:1.65"><b style="color:var(--primary);font-weight:600">隐私与安全：</b>提交后，您的敏感信息（身份证、银行账号）将进行加密存储，仅授权审核人员可查看，绝不外泄。如有疑问，可在管理后台联系客服或 <a href="javascript:jumpToStep(0)" style="color:var(--primary);font-weight:500;text-decoration:none">返回修改</a>。</div></div></div></div>`;return}let h='';if(step.showChannel){h+=`<div class="card"><div class="card-head"><div class="title-wrap"><div class="ico">📡</div><div><div class="tt">提交渠道</div><div class="sb">选择您需要开通的渠道，将根据选择展示必填字段</div></div></div><div class="tag">智能匹配</div></div><div class="card-body"><div class="ch-wrap"><div class="ch-tabs"><div class="ch-tab ${selectedChannel==='all'?'active':''}" data-channel="all">🌐 全部渠道</div><div class="ch-tab ${selectedChannel==='wechat'?'active':''}" data-channel="wechat">💚 微信</div><div class="ch-tab ali ${selectedChannel==='alipay'?'active':''}" data-channel="alipay">🔵 支付宝</div></div><div class="ch-hint">💡 选择 <b>全部渠道</b> 可一次性进件微信与支付宝小程序，后续可按需单独补充。只开通微信时，<b>支付宝联系人</b> 字段将自动跳过（反之亦然）。</div></div></div></div>`}if(step.textFields.length){h+=`<div class="card"><div class="card-head"><div class="title-wrap"><div class="ico">${step.icon}</div><div><div class="tt">${step.title}</div><div class="sb">${step.desc}</div></div></div></div><div class="card-body"><div class="form-grid">`;step.textFields.forEach(k=>{const f=getFieldDef(k);if(!f)return;const rel=isFieldRelevant(f);const dim=rel?'':'dim';const rm=f.required&&rel?'<span class="req">*</span>':(f.required?'<span style="color:var(--text-4);font-size:11px">·单渠道免填</span>':'');const hi=f.hint?`<span class="ft">${f.hint}</span>`:'';if(f.type==='textarea'){h+=`<div class="field full ${dim}"><div class="field-label">${f.label}${rm}${hi}</div><div class="field-wrap"><textarea class="field-input" data-key="${k}" placeholder="请输入${f.label}">${getStoredValue(k)}</textarea></div></div>`}else{h+=`<div class="field${step.title==='基本信息'?' full':''} ${dim}"><div class="field-label">${f.label}${rm}${hi}</div><div class="field-wrap"><input class="field-input" type="${f.type}" data-key="${k}" placeholder="请输入${f.label}" value="${escapeAttr(getStoredValue(k))}"/><div class="field-focus-line"></div></div></div>`}});h+=`</div></div></div>`}if(step.imageFields.length){h+=`<div class="card"><div class="card-head"><div class="title-wrap"><div class="ico">${step.icon}</div><div><div class="tt">${step.title}</div><div class="sb">${step.desc}</div></div></div><div class="tag">支持拍照上传</div></div><div class="card-body"><div class="up-grid">`;step.imageFields.forEach(k=>{const f=getImageDef(k);const has=!!uploadedImages[k];h+=`<div class="up-item"><div class="up-label">${f.label}${f.required?'<span class="req">*</span>':''}<span class="h">${f.hint}</span></div><div class="up-box ${has?'filled':''}">${has?`<img src="${uploadedImages[k]}" onclick="openViewer(event,this.src)"/><div class="up-act"><button type="button" class="up-btn" title="查看大图" onclick="event.stopPropagation();openViewerDirect('${k}')">👁</button><button type="button" class="up-btn del" title="删除" data-remove="${k}">×</button></div>`:`<div class="up-ph"><div class="cam">📷</div><div class="t">点击上传/拍照</div><div class="s">自动压缩，支持 JPG、PNG</div></div>`}<input type="file" accept="image/*" capture="environment" data-input="${k}"/></div></div>`});h+=`</div></div></div>`}container.innerHTML=h;document.querySelectorAll('.ch-tabs .ch-tab').forEach(t=>{t.addEventListener('click',()=>{document.querySelectorAll('.ch-tabs .ch-tab').forEach(x=>x.classList.remove('active'));t.classList.add('active');const p=selectedChannel;selectedChannel=t.dataset.channel;if(p!==selectedChannel)renderCurrentStep()})});document.querySelectorAll('[data-input]').forEach(inp=>{inp.addEventListener('change',async e=>{const k=inp.dataset.input;const f=e.target.files[0];if(!f)return;showToast('处理中...');try{uploadedImages[k]=await compressImage(f);renderCurrentStep();showToast('上传成功')}catch(err){showToast('图片处理失败')}})});document.querySelectorAll('[data-remove]').forEach(b=>{b.addEventListener('click',e=>{e.stopPropagation();const k=b.dataset.remove;delete uploadedImages[k];const i=document.querySelector(`[data-input="${k}"]`);if(i)i.value='';renderCurrentStep()})});document.querySelectorAll('[data-key]').forEach(el=>{el.addEventListener('input',()=>{storedValues[el.dataset.key]=el.value})})};
+window.openViewerDirect=k=>{const s=uploadedImages[k];if(s){document.getElementById('viewerImg').src=s;document.getElementById('viewer').classList.add('show')}};
+const submitForm=async()=>{const m=[];textFields.forEach(f=>{if(!f.required)return;if(!isFieldRelevant(f))return;if(!String(storedValues[f.key]||'').trim())m.push(f.label)});imageFields.forEach(f=>{if(f.required&&!uploadedImages[f.key])m.push(f.label)});if(m.length){showToast('请完成：'+m.slice(0,4).join('、')+(m.length>4?' 等':'')+' 必填项');const mks=k=>{const s=stepDefs.findIndex(s=>s.textFields.includes(k));return s>=0?s:(imageFields.some(f=>f.key===k)?1:0)};const fk=textFields.find(f=>f.required&&isFieldRelevant(f)&&!String(storedValues[f.key]||'').trim());const fik=imageFields.find(f=>f.required&&!uploadedImages[f.key]);if(fk){currentStep=mks(fk.key);refreshAll();return}if(fik){currentStep=1;refreshAll();return}return}const sb=document.getElementById('submitBtn');sb.disabled=true;sb.textContent='提交中...';try{const data={submit_channel:channelMap[selectedChannel]};textFields.forEach(f=>{data[f.key]=storedValues[f.key]||''});imageFields.forEach(f=>{data[f.key]=uploadedImages[f.key]||null});const{error}=await supabase.from('submissions').insert([data]).select('id');if(error)throw new Error(error.message);showToast('提交成功！',2600);document.getElementById('submitBar').style.display='none';document.getElementById('sidebar').style.display='none';document.getElementById('mStepper').style.display='none';const sb2=document.querySelector('.security-bar');if(sb2)sb2.style.display='none';document.getElementById('mainContainer').innerHTML=`<div class="success-wrap"><div class="success-icon">✓</div><div class="success-title">信息提交成功</div><div class="success-desc">您的进件资料已加密保存至服务器</div><div class="success-desc">我们将在 1-3 个工作日内完成审核，如有疑问将通过电话联系您</div><div class="info-grid"><div class="r"><div class="lbl">商户名称</div><div class="val">${escapeAttr(storedValues.merchant_name||'-')}</div></div><div class="r"><div class="lbl">开通渠道</div><div class="val">${channelMap[selectedChannel]}</div></div><div class="r"><div class="lbl">法人姓名</div><div class="val">${escapeAttr(storedValues.legal_name||'-')}</div></div><div class="r"><div class="lbl">联系电话</div><div class="val">${escapeAttr(storedValues.phone_primary||'-')}</div></div></div><div class="success-next"><button class="ok" onclick="location.reload()">📝 再提交一份</button><button class="bk" onclick="location.href='admin.html'">📊 查看后台</button></div></div>`}catch(err){showToast('提交失败：'+err.message);sb.disabled=false;sb.textContent='✓ 确认提交并完成'}};
+const init=()=>{document.getElementById('submitBar').style.display='';refreshAll()};
+init();
 })();
