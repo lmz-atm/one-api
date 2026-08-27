@@ -14,8 +14,9 @@
   let selectedChannel = 'all';
   const uploadedImages = {};
   let currentStep = 0;
-  const TOTAL_STEPS = 5;
+  const TOTAL_STEPS = 5; // 0 basic,1 images,2 contact,3 settlement,4 confirm
 
+  // ===== Step definitions =====
   const stepDefs = [
     {
       title: '基本信息', short: '基本', icon: '🏢',
@@ -56,6 +57,7 @@
     }
   ];
 
+  // ===== Field definitions =====
   const imageFields = [
     { key: 'business_license_image', label: '营业执照', hint: '彩色照，露出四边', required: true },
     { key: 'idcard_front_image', label: '身份证正面', hint: '清晰无反光', required: true },
@@ -88,6 +90,7 @@
     { key: 'remark', label: '备注信息', type: 'textarea', required: false, channel: 'all' }
   ];
 
+  // Determine if field is relevant for selected channel
   const isFieldRelevant = (def) => {
     if (!def.channel || def.channel === 'all') return true;
     if (selectedChannel === 'all') return true;
@@ -97,6 +100,7 @@
   const getFieldDef = (key) => textFields.find(f => f.key === key);
   const getImageDef = (key) => imageFields.find(f => f.key === key);
 
+  // ===== Image compression =====
   const compressImage = (file, maxWidth = 800, quality = 0.75) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -122,14 +126,15 @@
     });
   };
 
+  // ===== Validation with channel-awareness =====
   const validateStep = (stepIdx) => {
     const step = stepDefs[stepIdx];
-    if (step.isConfirm) return true;
+    if (step.isConfirm) return true; // no validation for confirm view
     const missing = [];
     step.textFields.forEach(key => {
       const def = getFieldDef(key);
       if (!def || !def.required) return;
-      if (!isFieldRelevant(def)) return;
+      if (!isFieldRelevant(def)) return; // skip non-relevant based on channel
       const el = document.querySelector(`[data-key="${key}"]`);
       if (!el || !el.value.trim()) missing.push(def.label);
     });
@@ -145,6 +150,7 @@
     return true;
   };
 
+  // ===== Sidebar / progress update =====
   const updateSidebar = () => {
     const sbEl = document.getElementById('sbSteps');
     if (sbEl) {
@@ -167,6 +173,7 @@
         });
       });
     }
+    // progress calc: simple %
     const pct = Math.round((currentStep / (TOTAL_STEPS - 1)) * 100);
     const pf = document.getElementById('progFill');
     const pp = document.getElementById('progPct');
@@ -203,6 +210,7 @@
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // ===== Step switch =====
   window.changeStep = (delta) => {
     const next = currentStep + delta;
     if (delta > 0 && !validateStep(currentStep)) return;
@@ -211,10 +219,7 @@
     refreshAll();
   };
 
-  const storedValues = {};
-  const getStoredValue = (key) => storedValues[key] || '';
-  const escapeAttr = (v) => String(v).replace(/"/g, '&quot;');
-
+  // ===== Confirmation summary generator =====
   const buildSummary = () => {
     const channel = channelMap[selectedChannel];
     const blocks = [
@@ -246,7 +251,14 @@
       ]}
     ];
 
+    // Filter by channel, detect missing
     const relevant = (chan) => chan === 'all' || selectedChannel === 'all' || selectedChannel === chan;
+
+    const hasMissing = (def, value, isImg) => {
+      if (!def.required) return false;
+      if (isImg) return !value;
+      return !String(value || '').trim();
+    };
 
     const makeItemRow = ([lbl, val, chan]) => {
       if (!relevant(chan)) return '';
@@ -256,6 +268,7 @@
       return `<div class="sum-row ${miss?'miss':''}"><div class="lbl">${lbl}</div><div class="val">${val || ''}</div></div>`;
     };
 
+    // Images block
     const imgList = imageFields.map(f => {
       const v = uploadedImages[f.key];
       const miss = f.required && !v;
@@ -291,7 +304,7 @@
         if (!def || !def.required) return false;
         return !String(val || '').trim();
       });
-      const stepIdx = idx === 0 ? 0 : (idx === 1 ? 2 : 3);
+      const stepIdx = idx === 0 ? 0 : (idx === 1 ? 2 : 3); // basic=0, contact=2, settle=3
       return `
         <div class="sum-block">
           <div class="sum-head">
@@ -311,6 +324,7 @@
     refreshAll();
   };
 
+  // ===== Viewer =====
   window.openViewer = (e, src) => {
     if (e && e.stopPropagation) e.stopPropagation();
     const s = src || (e && e.target && e.target.src);
@@ -324,10 +338,16 @@
     document.getElementById('viewerImg').src = '';
   };
 
+  // ===== Step rendering =====
+  const storedValues = {};
+  const getStoredValue = (key) => storedValues[key] || '';
+  const escapeAttr = (v) => String(v).replace(/"/g, '&quot;');
+
   const renderCurrentStep = () => {
     const step = stepDefs[currentStep];
     const container = document.getElementById('mainContainer');
 
+    // Confirmation step
     if (step.isConfirm) {
       container.innerHTML = `
         <div class="card">
@@ -356,6 +376,7 @@
       return;
     }
 
+    // Regular step with channel tabs
     let html = '';
     if (step.showChannel) {
       html += `
@@ -387,6 +408,7 @@
       `;
     }
 
+    // Text fields card
     if (step.textFields.length) {
       html += `<div class="card"><div class="card-head"><div class="title-wrap"><div class="ico">${step.icon}</div><div><div class="tt">${step.title}</div><div class="sb">${step.desc}</div></div></div></div><div class="card-body"><div class="form-grid">`;
       step.textFields.forEach(key => {
@@ -418,6 +440,7 @@
       html += `</div></div></div>`;
     }
 
+    // Image fields card
     if (step.imageFields.length) {
       html += `<div class="card"><div class="card-head"><div class="title-wrap"><div class="ico">${step.icon}</div><div><div class="tt">${step.title}</div><div class="sb">${step.desc}</div></div></div><div class="tag">支持拍照上传</div></div><div class="card-body"><div class="up-grid">`;
       step.imageFields.forEach(key => {
@@ -450,6 +473,7 @@
 
     container.innerHTML = html;
 
+    // Bind channel tabs
     document.querySelectorAll('.ch-tabs .ch-tab').forEach(tab => {
       tab.addEventListener('click', () => {
         document.querySelectorAll('.ch-tabs .ch-tab').forEach(t => t.classList.remove('active'));
@@ -462,6 +486,7 @@
       });
     });
 
+    // Bind image inputs
     document.querySelectorAll('[data-input]').forEach(input => {
       input.addEventListener('change', async (e) => {
         const fieldKey = input.dataset.input;
@@ -476,6 +501,7 @@
       });
     });
 
+    // Bind image remove
     document.querySelectorAll('[data-remove]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -487,6 +513,7 @@
       });
     });
 
+    // Auto-save
     document.querySelectorAll('[data-key]').forEach(el => {
       el.addEventListener('input', () => {
         storedValues[el.dataset.key] = el.value;
@@ -494,6 +521,7 @@
     });
   };
 
+  // Direct viewer by key (for uploaded images with long base64)
   window.openViewerDirect = (key) => {
     const src = uploadedImages[key];
     if (src) {
@@ -502,7 +530,9 @@
     }
   };
 
-  const submitForm = async () => {
+  // ===== Submit =====
+  window.submitForm = async () => {
+    // Quick scan for missing required fields (channel-aware)
     const missing = [];
     textFields.forEach(f => {
       if (!f.required) return;
@@ -514,6 +544,7 @@
     });
     if (missing.length) {
       showToast('请完成：' + missing.slice(0,4).join('、') + (missing.length>4?' 等':'') + ' 必填项');
+      // jump to first step with issues
       const mapKeyStep = (k) => {
         const s = stepDefs.findIndex(s => s.textFields.includes(k));
         return s >= 0 ? s : (imageFields.some(f => f.key === k) ? 1 : 0);
@@ -541,8 +572,7 @@
       document.getElementById('submitBar').style.display = 'none';
       document.getElementById('sidebar').style.display = 'none';
       document.getElementById('mStepper').style.display = 'none';
-      const sb2 = document.querySelector('.security-bar');
-      if (sb2) sb2.style.display = 'none';
+      document.querySelector('.security-bar').style.display = 'none';
       document.getElementById('mainContainer').innerHTML = `
         <div class="success-wrap">
           <div class="success-icon">✓</div>
@@ -568,6 +598,7 @@
     }
   };
 
+  // ===== Init =====
   const init = () => {
     document.getElementById('submitBar').style.display = '';
     refreshAll();
