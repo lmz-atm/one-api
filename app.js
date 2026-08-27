@@ -481,6 +481,7 @@
         const prev = selectedChannel;
         selectedChannel = tab.dataset.channel;
         if (prev !== selectedChannel) {
+          // re-render to dim fields
           renderCurrentStep();
         }
       });
@@ -531,7 +532,7 @@
   };
 
   // ===== Submit =====
-  window.submitForm = async () => {
+  const submitForm = async () => {
     // Quick scan for missing required fields (channel-aware)
     const missing = [];
     textFields.forEach(f => {
@@ -601,6 +602,7 @@
   // ===== Init =====
   const init = () => {
     document.getElementById('submitBar').style.display = '';
+    // submitBtn listener not needed since we bind onclick in html
     refreshAll();
   };
 
